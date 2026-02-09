@@ -1,0 +1,2241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+	
+	<!--
+	TODO:
+	- laita sivutus kalenteriin: joku nappi "näytä lisää".
+	- finish: <a href="#" id="nav-styles" style="display:none">Tyylit</a>
+	- transfer data from kasteluapp into this app.
+	- add custom styles (renderstylespage finished with styles, continue from there and new db version etc.
+		continue: style-item-prototype
+	- tee kasteluun nouseva väri vasemmalta oikealle, 0,25,50,75,100% 4 klikkauksella 100%
+	- mahdollisuus kirjoittaa mitä tahansa arvoja, tuplaklikkaus avaa näppäimistön siihen arvon kirjoittamiseen.
+	- mahdollisuus leventää kentän leveyttä jotta tekstiarvot näkyvät paremmin.
+	
+	-->
+ 
+ 	<!-- note: remove slashes from filenames, also from manifest, and change bgcolors to black -->
+	<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+	<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+	<link rel="manifest" href="site.webmanifest">
+
+	<!--this fucks up dblclick event from firing since its not allowed to zoom:-->
+	
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+	<!--
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+	-->
+	
+   
+	
+	<meta name="mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black">
+
+	<meta property="og:title" content="LogApp">
+	<meta property="og:description" content="Log your events">
+	
+    <title>LogApp</title>
+    <style>
+        :root {
+            --bg-color: #000000;
+            --text-color: #f0f0f0;
+            --primary-color: #0a84ff;
+            --surface-color: #0a0d0a;
+            --border-color: #8f8f8f;
+            --watered-color: #022772; /* Dark Blue */
+			--fertilized-color: #046817;
+            --session-change-color: #3399ff; /* Light Blue */
+            --danger-color: #ff3b30;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+        }
+        
+        /* --- START: Added Loader CSS --- */
+        #loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+
+        .loader-spinner {
+            border: 8px solid var(--surface-color); 
+            border-top: 8px solid var(--primary-color); 
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* --- END: Added Loader CSS --- */
+
+        #app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+			background-color:black;
+        }
+		
+		#plants-page {
+			margin-bottom: 50px;
+		}
+		#groups-page {
+			margin-bottom: 50px;
+		}
+		
+        #menu-icon {
+            font-size: 28px;
+            padding: 10px;
+            cursor: pointer;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1002;
+        }
+        
+        #menu {
+            position: fixed;
+            top: 0;
+            left: -250px;
+            width: 200px;
+            height: 100%;
+            background-color: var(--surface-color);
+            box-shadow: 2px 0 5px rgba(0,0,0,0.5);
+            transition: left 0.3s ease;
+            z-index: 1001;
+            padding-top: 60px;
+        }
+
+        #menu.open {
+            left: 0;
+        }
+
+        #menu a {
+            display: block;
+            padding: 15px 20px;
+            color: var(--text-color);
+            text-decoration: none;
+            font-size: 18px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        #menu a:hover {
+			/*
+			bugged after optimizing page render calls o.o
+			background-color: var(--primary-color);
+			*/
+        }
+        #menu a.active {
+            background-color: var(--primary-color);
+        }
+
+        main {
+            padding: 60px 5px 5px 5px;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        .page { display: none; }
+        .page.active { display: block; }
+		
+		.all-items-icon {
+			position: relative;
+			bottom: 3px;
+			color:#AAAAFF;
+		}
+        
+        /* --- Plants Page --- */
+        #plant-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .plant-row, #add-plant-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding: 5px;
+            background-color: var(--surface-color);
+            border-radius: 5px;
+        }
+
+        .plant-row.dragging {
+            opacity: 0.5;
+            background: var(--primary-color);
+        }
+
+        .plant-name-input {
+            flex-grow: 1;
+			min-width: 50px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+		
+        .plant-style-input {
+            flex-grow: 1;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+		
+		.plant-group-input {
+            flex-grow: 1;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+		
+        .plant-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 20px;
+            padding: 5px;
+        }
+
+ 
+        #add-plant-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+		
+		
+		
+		
+		
+        /* --- groups Page --- */
+        #group-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .group-row, #add-group-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding: 5px;
+            background-color: var(--surface-color);
+            border-radius: 5px;
+        }
+
+        .group-row.dragging {
+            opacity: 0.5;
+            background: var(--primary-color);
+        }
+
+        .group-name-input {
+            flex-grow: 1;
+			min-width: 50px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+		
+
+        .group-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 20px;
+            padding: 5px;
+        }
+
+ 
+        #add-group-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+		
+		
+		
+		
+
+		
+        /* --- styles Page --- */
+        #style-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .style-row, #add-style-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding: 5px;
+            background-color: var(--surface-color);
+            border-radius: 5px;
+        }
+
+        .style-row.dragging {
+            opacity: 0.5;
+            background: var(--primary-color);
+        }
+
+        .style-name-input {
+            flex-grow: 1;
+			min-width: 50px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .style-type-input {
+            flex-grow: 1;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .style-items-input {
+            flex-grow: 1;
+			min-width: 50px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+		
+        .style-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 20px;
+            padding: 5px;
+        }
+
+ 
+        #add-style-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+		
+		
+		
+		
+		.reorder-handle { cursor: grab; }
+        .reorder-handle:active { cursor: grabbing; }
+        .delete-btn { color: var(--danger-color); }
+
+
+        /* --- Calendar Page --- */
+        #calendar-container {
+            width: 100%;
+            height: calc(100vh - 65px); /* Full viewport height minus top padding */
+            overflow: auto; /* Enables both horizontal and vertical scrolling */
+        }
+        
+        #calendar-table {
+            border-collapse: collapse;
+           
+    border-spacing: 0px;
+        }
+
+        #calendar-table th {
+            border: 1px solid var(--border-color);
+            text-align: center;
+            padding: 0;
+
+            height: 170px  !important;
+			
+			background-color: var(--surface-color);
+            position: sticky;
+            top: -1px;
+            z-index: 10;
+        }
+		
+		#calendar-table td {
+            border: 1px solid var(--border-color);
+            text-align: center;
+            padding: 0;
+			---width: 40px;
+            height: 40px;
+        }
+		
+	
+		
+	
+
+        .plant-header-cell {
+            vertical-align: bottom;
+			width: 40px !important;
+			min-width: 40px !important;
+            padding-bottom: 8px;
+        }
+		
+		.date-col-corner {
+            min-width: 70px !important;
+            max-width: 70px !important;
+			height: 170px  !important;
+		}
+		
+		.weekstart {
+			border-bottom:3px solid rgb(204,204,204);
+		}
+
+        .date-col {
+            min-width: 70px;
+            max-width: 70px;
+            background-color: var(--surface-color);
+            font-size: 14px;
+            position: sticky;
+            left: -1px;
+            z-index: 5;
+
+			user-select: none;
+			-webkit-user-select: none; /* Safari */
+			-ms-user-select: none;     /* Old IE/Edge */
+		  
+			touch-action: manipulation; /* avoids double-tap zoom */
+        }
+		
+
+		
+		.date-col.today {
+			font-weight:bold;
+			color:#FFFF55;
+		}
+        
+
+        .rotated-text {
+            display: inline-block;
+            transform: rotate(-90deg);
+            white-space: nowrap;
+            width: 25px; /* Matches cell height */
+            height: 25px; /* Matches cell width */
+            text-align: left;
+			
+			
+			font-weight: normal;
+        }
+
+        .water-btn {
+            width: 40px;
+            height: 40px;
+            border: none;
+            cursor: pointer;
+            display: block;
+		    background-color: var(--bg-color);
+            color: var(--text-color);
+            font-size: 20px; /* Make the number readable */
+			
+			
+		    user-select: none;
+		    -webkit-user-select: none; /* Safari */
+		    -ms-user-select: none;     /* Old IE/Edge */
+		  
+		    touch-action: manipulation; /* avoids double-tap zoom */
+        }
+		
+	
+		
+		.focused-style-title {
+			background-color:#222244 !important;
+		}
+		.focused-style-cell {
+			border-right:2px solid white !important;
+			border-left:2px solid white !important;
+		}
+		
+		#calendar-head {
+			
+		    user-select: none;
+		    -webkit-user-select: none; /* Safari */
+		    -ms-user-select: none;     /* Old IE/Edge */
+		  
+		    touch-action: manipulation; /* avoids double-tap zoom */
+		}
+
+    
+        .water-btn.session-changed { border:1px dashed rgb(153,153,153); }
+
+
+
+/* Top tabs container */
+#top-tabs-container {
+    overflow-x: auto; /* allow horizontal scroll */
+    white-space: nowrap; /* keep tabs in one line */
+    flex-grow: 1; /* fill remaining space next to menu-icon */
+	position:relative;
+	//left:60px;
+	//top:10px;
+	margin-left:60px;
+	margin-top:10px;
+	-webkit-overflow-scrolling: touch; /* smooth scrolling on iOS */
+    scrollbar-width: none; /* Firefox */
+	height:43px; /*prevent showing transparent when toptabs arent shown*/
+	
+
+	user-select: none;
+	-webkit-user-select: none; /* Safari */
+	-ms-user-select: none;     /* Old IE/Edge */
+  
+	touch-action: manipulation; /* avoids double-tap zoom */
+}
+
+
+
+#top-tabs-container::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+}
+
+
+#top-tabs {
+    display: inline-flex;
+}
+
+.tab {
+    display: inline-block;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+}
+
+.tab.active {
+    border-bottom: 2px solid blue;
+    font-weight: bold;
+}
+
+
+.unused-group {
+	color:gray;
+}
+
+.disabledClass input {
+    color: #777 !important;
+    border-color: #444;
+}
+.disabledClass select {
+    color: #777 !important;
+    border-color: #444;
+}
+
+.hiddenclass {
+	display:none !important;
+}
+
+    </style>
+</head>
+<body>
+
+    <div id="loader-overlay">
+        <div class="loader-spinner"></div>
+    </div>
+    <div id="app-container" style="visibility: hidden;">
+		<header>
+            <div id="menu-icon">&#9776;</div>
+			
+			<div id="top-tabs-container">
+				<div id="top-tabs"></div>
+			</div>
+		
+            <nav id="menu">
+                <a href="#" id="nav-plants">Teot</a>
+                <a href="#" id="nav-groups">Ryhmät</a>
+                <a href="#" id="nav-styles" style="display:none">Tyylit</a>
+                <a href="#" id="nav-calendar">Kalenteri</a>
+            </nav>
+        </header>
+
+        <main>
+            <div id="plants-page" class="page">
+                <ul id="plant-list"></ul>
+                <div id="add-plant-row">
+                    <input type="text" class="plant-name-input" id="new-plant-name" placeholder="Uuden teon nimi...">
+					<select class="plant-style-input" id="default-plant-style-input"></select>
+					<select class="plant-group-input" id="default-plant-group-input"></select>
+                </div>
+                <button id="add-plant-btn">Lisää teko</button>
+            </div>
+			
+            <div id="groups-page" class="page">
+                <ul id="group-list"></ul>
+                <div id="add-group-row">
+                    <input type="text" class="group-name-input" id="new-group-name" placeholder="Uuden ryhmän nimi...">
+                </div>
+                <button id="add-group-btn">Lisää ryhmä</button>
+            </div>
+			
+			<div id="styles-page" class="page">
+                <ul id="style-list"></ul>
+				
+				<li id="style-item-prototype" style="display:none">
+					<span class="reorder-handle style-btn">↕️</span>
+					<input type="text" class="style-name-input">
+					<select class="style-type-input"></select>
+					<input type="text" class="style-items-input" placeholder='"arvo1", "arvo2", "arvo3", ...'>
+					<button class="delete-btn style-btn">🗑️</button>
+				</li>
+
+                <div id="add-style-row">
+                    <input type="text" class="style-name-input" id="new-style-name" placeholder="Uuden tyylin nimi...">
+					<select class="style-type-input" id="default-style-type-input"></select>
+					<input type="text" class="style-items-input" id="new-style-items" placeholder="&quot;arvo1&quot;, &quot;arvo2&quot;, &quot;arvo3&quot;, ...">
+                </div>
+                <button id="add-style-btn">Lisää tyyli</button>
+            </div>
+			
+            <div id="calendar-page" class="page">
+                <div id="calendar-container">
+                    <table id="calendar-table">
+                        <thead id="calendar-head"></thead>
+                        <tbody id="calendar-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DB Setup database ---
+        const DB_NAME = 'UserActionsDB';
+        const DB_VERSION = 3;
+        const PLANTS_STORE = 'actions';
+        const GROUPS_STORE = 'groups';
+        const WATERING_STORE = 'actionsData';
+		const SETTINGS_STORE = 'settings';
+        let db;
+		
+		
+		const SETTING_LAST_OPEN_TAB = "lastOpenTab";
+		let currentGroupOpen = -1;
+		let currentPageName = "";
+
+		const PAGE = {
+			PLANTS: "plants",
+			GROUPS: "groups",
+			STYLES: "styles",
+			CALENDAR: "calendar",
+		};
+
+		let compactView = false;
+		
+		const deleteall = false;
+		if(deleteall){
+			const request = indexedDB.deleteDatabase(DB_NAME);
+			
+			request.onsuccess = function () {
+			  console.log(`Database "${DB_NAME}" deleted successfully`);
+			};
+
+			request.onerror = function () {
+			  console.error(`Error deleting database "${DB_NAME}"`);
+			};
+
+			request.onblocked = function () {
+			  console.warn(`Delete blocked: Please close all tabs using "${DB_NAME}"`);
+			};
+	
+		}
+		
+		
+
+        function openDb() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = (e) => reject("Error opening DB: " + e.target.errorCode);
+                request.onsuccess = (e) => {
+                    db = e.target.result;
+                    resolve(db);
+                };
+                request.onupgradeneeded = (e) => {
+                    const dbInstance = e.target.result;
+					const oldVersion = e.oldVersion;
+					const newVersion = e.newVersion;
+
+					if (oldVersion < 2) {
+						if (!dbInstance.objectStoreNames.contains(PLANTS_STORE)) {
+							const plantStore = dbInstance.createObjectStore(PLANTS_STORE, { keyPath: 'id', autoIncrement: true });
+							plantStore.createIndex('order', 'order', { unique: false });
+						}
+						if (!dbInstance.objectStoreNames.contains(WATERING_STORE)) {
+							dbInstance.createObjectStore(WATERING_STORE, { keyPath: 'date' });
+						}
+					}
+					if (oldVersion < 3) {
+						// New store for settings
+						if (!dbInstance.objectStoreNames.contains(SETTINGS_STORE)) {
+							dbInstance.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
+						}
+					}
+					if (oldVersion < 4) {
+						if (!dbInstance.objectStoreNames.contains(GROUPS_STORE)) {
+							const groupStore = dbInstance.createObjectStore(GROUPS_STORE, { keyPath: 'id', autoIncrement: true });
+							groupStore.createIndex('order', 'order', { unique: false });
+						}
+					}
+
+                };
+            });
+        }
+		function getSetting(key) {
+			return new Promise((resolve, reject) => {
+				const transaction = db.transaction([SETTINGS_STORE], 'readonly');
+				const store = transaction.objectStore(SETTINGS_STORE);
+				const request = store.get(key);
+
+				request.onsuccess = () => resolve(request.result?.value);
+				request.onerror = () => reject(request.error);
+			});
+		}
+
+		function saveSetting(key, value) {
+			const transaction = db.transaction([SETTINGS_STORE], 'readwrite');
+			const store = transaction.objectStore(SETTINGS_STORE);
+			store.put({ key, value });
+		}
+		
+	
+		
+		let plantStyles = [
+			{id:0, text:"Numero", type:0},
+			{id:10, text:"✔", type:1},
+			{id:20, text:"✖", type:1},
+			{id:21, text:"★", type:1},
+			{id:22, text:"✿", type:1},
+			{id:23, text:"●", type:1},
+			{id:24, text:"■", type:1},
+			{id:25, text:"🍄", type:1},
+			{id:26, text:"⛺", type:1},
+			{id:27, text:"⌗", type:1},
+			{id:28, text:"Ⓞ", type:1},
+			{id:30, text:"1 väri", type:2, list: ["", "#022772"]},
+			{id:40, text:"2 väriä", type:2, list: ["", "#022772", "#046817"]},
+			{id:50, text:"Emoji", type:3, list: ["", "😐", "😊", "😁", "😂", "😍", "🙁", "😭", "😡"]},
+		];
+
+		let plantStyleTypes = [
+			{id:0, text:"Numero", disabled: true}, // disabled = not possible to make new style with this type.
+			{id:1, text:"Merkki on/off"},
+			{id:3, text:"Merkkilista"},
+			{id:2, text:"Taustavärit"},
+			{id:4, text:"Taustavärit %"},
+		];
+		
+		/*
+		let plantGroups = [
+			{id: -1, text: "Ryhmä", order: 0, notSelectable: true},
+			{id: 0, text: "Muut", order: 1},
+			{id: 1, text: "Kasvit", order: 2},
+			{id: 2, text: "Siivous", order: 3},
+			{id: 3, text: "Makuuhuone", order: 4},
+			{id: 4, text: "Olohuone", order: 5},
+			{id: 5, text: "Parveke", order: 6},
+		];
+		*/
+
+		// plantStyles.find(s => s.id == style)?.type ?? 0;
+		function findType(style){
+			for(let i = 0; i < plantStyles.length; i++){
+				if(plantStyles[i].id == style){
+					return plantStyles[i].type;
+				}
+			}
+			return 0;
+		}
+		
+		// plantStyles.find(s => s.id == style)?.text ?? "";
+		function findText(style){
+			for(let i = 0; i < plantStyles.length; i++){
+				if(plantStyles[i].id == style){
+					return plantStyles[i].text;
+				}
+			}
+			return "";
+		}
+		
+		// plantStyles.find(s => s.id == style)?.list ?? null;
+		function findList(style){
+			for(let i = 0; i < plantStyles.length; i++){
+				if(plantStyles[i].id == style){
+					return plantStyles[i].list;
+				}
+			}
+			return null;
+		}
+		
+		function datetimeToTime(ts){
+			const date = new Date(ts);
+
+			// Option 1: Locale-aware string (respects device locale)
+			//const timeStr = date.toLocaleTimeString();
+			//console.log(timeStr); // e.g. "23:33:22"
+
+			// Option 2: Fixed format (HH:MM:SS, 24-hour)
+			const hh = String(date.getHours()).padStart(2, "0");
+			const mm = String(date.getMinutes()).padStart(2, "0");
+			const ss = String(date.getSeconds()).padStart(2, "0");
+			return `${hh}:${mm}:${ss}`;
+		}
+	
+        // --- State ---
+        let plants = [];
+        let groups = [];
+        let styles = [];
+        let wateringData = {};
+        let tapTimer = null;
+        let lastTapTarget = null;
+		
+		let lastClickedTh = null;
+		let lastClickedTitleID = null;
+		let focusedTitleBG = "#242541";
+
+        // --- UI Elements ---
+        const loaderOverlay = document.getElementById('loader-overlay'); // <-- START: Added loader element
+        const appContainer = document.getElementById('app-container'); // <-- START: Added app container
+        const menuIcon = document.getElementById('menu-icon');
+        const menu = document.getElementById('menu');
+        const navPlants = document.getElementById('nav-plants');
+        const navGroups = document.getElementById('nav-groups');
+        const navStyles = document.getElementById('nav-styles');
+        const navCalendar = document.getElementById('nav-calendar');
+        const pages = {
+            plants: document.getElementById('plants-page'),
+            groups: document.getElementById('groups-page'),
+            styles: document.getElementById('styles-page'),
+            calendar: document.getElementById('calendar-page'),
+        };
+        const plantListEl = document.getElementById('plant-list');
+        const newPlantNameInput = document.getElementById('new-plant-name');
+		const newPlantStyleSelect = document.getElementById('default-plant-style-input');
+		const newPlantGroupSelect = document.getElementById('default-plant-group-input');
+        const addPlantBtn = document.getElementById('add-plant-btn');
+		
+        const groupListEl = document.getElementById('group-list');
+        const newGroupNameInput = document.getElementById('new-group-name');
+        const addGroupBtn = document.getElementById('add-group-btn');
+		
+		
+		let templateStyleListEl = document.getElementById("style-item-prototype");
+		const styleListEl = document.getElementById('style-list');
+        const newStyleNameInput = document.getElementById('new-style-name');
+		const newStyleTypeSelect = document.getElementById('default-style-type-input');
+        const addStyleBtn = document.getElementById('add-style-btn');
+		
+		const topTabs = document.getElementById('top-tabs');
+        const calendarHead = document.getElementById('calendar-head');
+        const calendarBody = document.getElementById('calendar-body');
+
+
+        const topTabsList = document.getElementById('top-tabs');
+
+		let input = `"value1", "value2, with comma", "value3"`;
+		// Match anything inside quotes, even if it contains commas
+		let arr = [...input.matchAll(/"([^"]*)"/g)].map(m => m[1]);
+		console.log(arr); 
+		
+
+		function showTopTabs(enabled){
+			if(enabled){
+				topTabsList.classList.remove("hiddenclass");
+			}else{
+				topTabsList.classList.add("hiddenclass");
+			}
+		}
+		
+		function renderTopTabs() {
+			// ${group.order === 0 ? "active" : ""}
+			let topTabShowAll = `<div class="tab active" data-id="-1"><span class="all-items-icon">✽</span></div>`;
+			/*
+			let topTabsHTML = groups
+				.filter(group => group.id !== -1)
+				.map(group => {
+				return `<div class="tab" data-id="${group.id}">${group.name}</div>`;
+			}).join('');
+			*/
+			
+			// make array of only the groups used in plants:
+			let usedGroupIds = new Set(plants.map(p => p.group));
+
+			let topTabsHTML = groups
+			  .filter(group => group.id !== -1)
+			  .map(group => {
+				// make into string first or check fails:
+				const isUsed = usedGroupIds.has(String(group.id));
+				return `<div class="tab ${isUsed ? '' : 'unused-group'}" data-id="${group.id}">${group.name}</div>`;
+			  })
+			  .join('');
+			  
+			topTabs.innerHTML = topTabShowAll+topTabsHTML;
+			activateLastTab();
+		}
+		
+		function activateLastTab() {
+			console.log("activateLastTab");
+			getSetting(SETTING_LAST_OPEN_TAB).then(lastTabId => {
+				const tabs = document.querySelectorAll('.tab');
+				let tabToActivate = null;
+
+				if (lastTabId) {
+					currentGroupOpen = lastTabId;
+					console.log("current group open: "+lastTabId);
+					tabs.forEach(tab => tab.classList.remove('active'));
+					tabToActivate = Array.from(tabs).find(tab => tab.dataset.id === lastTabId);
+				} else {
+					// fallback: first tab active
+					if(tabs.length > 0){
+						tabToActivate = tabs[0];
+						const defaultTabId = tabToActivate.dataset.id; 
+						currentGroupOpen = defaultTabId;
+					}else{
+						currentGroupOpen = -1;
+					}
+					console.log("current group open: "+currentGroupOpen);
+					// save the default tab into the DB so future calls succeed
+					saveSetting(SETTING_LAST_OPEN_TAB, currentGroupOpen);
+				}
+
+				if (tabToActivate) {
+					tabToActivate.classList.add('active');
+					// scroll the tab into view
+					tabToActivate.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+				}
+			});
+		}
+		
+		
+
+
+		function getDisplayValue(state, style){
+			let type = findType(style);//plantStyles.find(s => s.id == style)?.type ?? 0;
+			let icon = findText(style);//plantStyles.find(s => s.id == style)?.text ?? "";
+			
+			
+			let displayText = "";
+			let bgcolor = "";
+			
+			switch(type){
+				case 1: // icon on/off
+					displayText = state > 0 ? icon : '';
+				break;
+				case 2: { // bgcolor looping
+					// no text.
+					let list = findList(style);//plantStyles.find(s => s.id == style)?.list ?? null;
+					if(list){
+						if(state < list.length){
+							bgcolor = list[state];
+						}else{
+							bgcolor = list[list.length-1];
+						}
+					}
+				}
+				break;
+				case 3: { // emoji looping
+					let list = findList(style);//plantStyles.find(s => s.id == style)?.list ?? null;
+					if(list){
+						if(state < list.length){
+							displayText = list[state];
+						}else{
+							displayText = list[list.length-1];
+						}
+					}
+				}
+				break;
+				default: // type 0
+					displayText = state > 0 ? state : '';
+				break;
+			}
+			return {text: displayText, bgcolor: bgcolor};
+		}
+
+		
+        // --- Core Functions ---
+		async function initializeApp() {
+			await openDb();
+			await loadData();
+			await loadLastTab();
+
+
+			const today = new Date();
+			const pastdate = new Date();
+			pastdate.setDate(today.getDate() - 31*6); // add 6 months of empty logs.
+			
+			
+			const pastdateStr = getFormattedDate(pastdate);
+			//console.log(pastdateStr);
+
+			// Determine first date to start filling from
+			let earliestDate = pastdate;
+			const keys = Object.keys(wateringData);
+
+			if (keys.length > 0) {
+				const parsedDates = keys.map(k => {
+					const [d, m, y] = k.split('.');
+					return new Date(`20${y}`, m - 1, d);
+				});
+				earliestDate = new Date(Math.min(...parsedDates, pastdate)); // oldest date
+			}
+
+			// Fill all days from earliestDate to today
+			const allDates = getDateRange(earliestDate, today);
+			
+			for (const date of allDates) {
+				const dateStr = getFormattedDate(date);
+				
+				if (!wateringData[dateStr]) {
+					const newDayData = {};
+					plants.forEach(p => newDayData[p.id] = 0);
+					wateringData[dateStr] = newDayData;
+					console.log(dateStr);
+					await saveWateringData(dateStr, newDayData);
+				}
+			}
+
+			setupEventListeners();
+
+			if (plants.length > 0) {
+				showPage(PAGE.CALENDAR);
+			} else {
+				showPage(PAGE.PLANTS);
+			}
+			renderAll();
+			
+			renderTopTabs();
+			
+            
+            // --- START: Added logic to hide loader ---
+            // Make the main content visible now that it's ready
+            appContainer.style.visibility = 'visible';
+            
+            // Fade out and then hide the loader
+            loaderOverlay.style.opacity = '0';
+            loaderOverlay.addEventListener('transitionend', () => {
+                loaderOverlay.style.display = 'none';
+            }, { once: true }); // 'once' ensures the event listener is removed after firing
+            // --- END: Added logic to hide loader ---
+		}
+
+
+		async function loadLastTab() {
+			//currentGroupOpen = await getSetting(SETTING_LAST_OPEN_TAB);
+			
+			
+			await getSetting(SETTING_LAST_OPEN_TAB).then(lastTabId => {
+				const tabs = document.querySelectorAll('.tab');
+				let tabToActivate = null;
+
+				if (lastTabId) {
+					currentGroupOpen = lastTabId;
+					console.log("current group open: "+lastTabId);
+					tabs.forEach(tab => tab.classList.remove('active'));
+					tabToActivate = Array.from(tabs).find(tab => tab.dataset.id === lastTabId);
+				} else {
+					// fallback: first tab active
+					if(tabs.length > 0){
+						tabToActivate = tabs[0];
+						const defaultTabId = tabToActivate.dataset.id; 
+						currentGroupOpen = defaultTabId;
+					}else{
+						currentGroupOpen = -1;
+					}
+					console.log("current group open: "+currentGroupOpen);
+					// save the default tab into the DB so future calls succeed
+					saveSetting(SETTING_LAST_OPEN_TAB, currentGroupOpen);
+				}
+
+				if (tabToActivate) {
+					tabToActivate.classList.add('active');
+					// scroll the tab into view
+					tabToActivate.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+				}
+			});
+		}
+		
+		
+        async function loadData() {
+            const plantTx = db.transaction(PLANTS_STORE, 'readonly');
+            const plantStore = plantTx.objectStore(PLANTS_STORE);
+            const plantIndex = plantStore.index('order');
+            plants = await new Promise((resolve) => {
+                const allPlants = [];
+                plantIndex.openCursor().onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        allPlants.push(cursor.value);
+                        cursor.continue();
+                    } else {
+                        resolve(allPlants);
+						console.log(allPlants);
+                    }
+                };
+            });
+			
+			
+			const groupTx = db.transaction(GROUPS_STORE, 'readonly');
+            const groupStore = groupTx.objectStore(GROUPS_STORE);
+            const groupIndex = groupStore.index('order');
+            groups = await new Promise((resolve) => {
+                const allGroups = [];
+                groupIndex.openCursor().onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        allGroups.push(cursor.value);
+                        cursor.continue();
+                    } else {
+                        resolve(allGroups);
+						console.log(allGroups);
+                    }
+                };
+            });
+
+            const waterTx = db.transaction(WATERING_STORE, 'readonly');
+            const waterStore = waterTx.objectStore(WATERING_STORE);
+            const waterRecords = await new Promise((resolve) => waterStore.getAll().onsuccess = (e) => resolve(e.target.result));
+            
+            wateringData = {};
+            waterRecords.forEach(record => {
+                wateringData[record.date] = record.data;
+            });
+        }
+
+        function getFormattedDate(date) {
+            const d = String(date.getDate()).padStart(2, '0');
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const y = String(date.getFullYear()).slice(-2);
+            return `${d}.${m}.${y}`;
+        }
+		
+		
+		function getDateRange(start, end) {
+			const dates = [];
+			let current = new Date(start);
+			while (current <= end) {
+				dates.push(new Date(current));
+				current.setDate(current.getDate() + 1);
+			}
+			return dates;
+		}
+		
+		
+		function getWeekday(dateStr) {
+		  // dateStr in format "dd.mm.yy"
+		  const [dd, mm, yy] = dateStr.split(".");
+		  
+		  // Fix year, e.g. "25" -> 2025
+		  const year = 2000 + parseInt(yy, 10);  
+		  const month = parseInt(mm, 10) - 1; // JS month is 0-indexed
+		  const day = parseInt(dd, 10);
+
+		  const date = new Date(year, month, day);
+
+		  const weekdays = ["Su", "Ma", "Ti", "Ke", "To", "Pe", "La"];
+		  return weekdays[date.getDay()];
+		}
+        
+		
+		
+        function showPage(pageName) {
+            Object.values(pages).forEach(p => p.classList.remove('active'));
+            pages[pageName].classList.add('active');
+            
+            navPlants.classList.toggle('active', pageName === PAGE.PLANTS);
+            navGroups.classList.toggle('active', pageName === PAGE.GROUPS);
+            navStyles.classList.toggle('active', pageName === PAGE.STYLES);
+            navCalendar.classList.toggle('active', pageName === PAGE.CALENDAR);
+			
+			currentPageName = pageName;
+			console.log(`currentPageName = ${currentPageName}`);
+
+            menu.classList.remove('open');
+        }
+
+        // --- Rendering ---
+        function renderAll() {
+
+			console.time("renderAll"); // start timer
+
+			renderPlantsPage();
+			renderCalendarPage();
+
+			console.timeEnd("renderAll"); // logs elapsed time
+        }
+		
+
+        function renderPlantsPage() {
+			console.time("renderPlantsPage"); // start timer
+		
+
+			// Generate options dynamically
+			let plantStylesOptionsHTML = plantStyles.map(style => {
+				return `<option value="${style.id}">${style.text}</option>`;
+			}).join('');
+			newPlantStyleSelect.innerHTML = plantStylesOptionsHTML;
+			
+			
+			let plantGroupsOptionsHTML = groups.map(group => {
+				return `<option value="${group.id}">${group.name}</option>`;
+			}).join('');
+			newPlantGroupSelect.innerHTML = plantGroupsOptionsHTML;
+			
+		
+            plantListEl.innerHTML = '';
+            plants.forEach(plant => {
+                const li = document.createElement('li');
+                li.className = 'plant-row';
+                li.dataset.id = plant.id;
+                li.draggable = true;
+				
+				// update coloring for inputs if the group is currently open:
+				if(plant.group == currentGroupOpen || currentGroupOpen == -1){
+					li.classList.remove("disabledClass");
+				}else{
+					li.classList.add("disabledClass");
+				}
+				
+				// Generate options dynamically
+				let optionsHTML = plantStyles.map(style => {
+					return `<option value="${style.id}" ${style.id == plant.style ? 'selected' : ''}>${style.text}</option>`;
+				}).join('');
+				
+
+				let foundGroup = false;
+				let groupsOptionsHTML = groups.map(group => {
+					if(group.id == plant.group){
+						foundGroup = true;
+					}
+					return `<option value="${group.id}" ${group.id == plant.group ? 'selected' : ''}>${group.name}</option>`;
+				}).join('');
+				
+				if (!foundGroup) {
+					groupsOptionsHTML = `<option value="-1" selected>— Ei ryhmää —</option>` + groupsOptionsHTML;
+				}
+			
+				
+
+                li.innerHTML = `
+                    <span class="reorder-handle plant-btn">↕️</span>
+                    <input type="text" class="plant-name-input" value="${plant.name}" data-id="${plant.id}">
+					<select class="plant-style-input" data-id="${plant.id}">
+						${optionsHTML}
+					</select>
+					<select class="plant-group-input" data-id="${plant.id}">
+						${groupsOptionsHTML}
+					</select>
+                    <button class="delete-btn plant-btn" data-id="${plant.id}">🗑️</button>
+                `;
+                plantListEl.appendChild(li);
+            });
+			
+			console.timeEnd("renderPlantsPage"); // end timer
+		
+        }
+		
+		
+        function renderStylesPage() {
+			console.time("renderStylesPage"); // start timer
+			
+			
+			// Generate options dynamically
+			let styleTypesOptionsHTML = plantStyleTypes
+				.filter(type => !type.disabled)
+				.map(type => {
+				return `<option value="${type.id}">${type.text}</option>`;
+			}).join('');
+			newStyleTypeSelect.innerHTML = styleTypesOptionsHTML;
+			
+			// read "a","b","c" into an array:
+			// let arr = [...input.matchAll(/"([^"]*)"/g)].map(m => m[1]);
+			
+
+			
+			/*
+			let plantStyles = [
+				{id:0, text:"Numero", type:0},
+				{id:10, text:"✔", type:1},
+				{id:20, text:"✖", type:1},
+				{id:21, text:"★", type:1},
+				{id:22, text:"✿", type:1},
+				{id:23, text:"●", type:1},
+				{id:24, text:"■", type:1},
+				{id:25, text:"🍄", type:1},
+				{id:26, text:"⛺", type:1},
+				{id:30, text:"1 väri", type:2, list: ["", "#022772"]},
+				{id:40, text:"2 väriä", type:2, list: ["", "#022772", "#046817"]},
+				{id:50, text:"Emoji", type:3, list: ["", "😐", "😊", "😁", "😂", "😍", "🙁", "😭", "😡"]},
+			];
+			
+			
+			let plantStyleTypes = [
+				{id:0, text:"Numero"},
+				{id:1, text:"Merkki on/off"},
+				{id:3, text:"Merkkilista"},
+				{id:2, text:"Taustaväri"},
+				{id:4, text:"Taustaväri %"},
+			];
+			*/
+		
+            styleListEl.innerHTML = '';
+			plantStyles.forEach(style => {
+			
+
+				let li = templateStyleListEl.cloneNode(true);
+				li.style.display = ""; // unhide
+                li.className = 'style-row';
+                li.dataset.id = style.id;
+                li.draggable = true;
+				
+				let listStr = "";
+				if(style.list && style.list.length > 0){
+					listStr = style.list.map(v => `"${v}"`).join(", ");
+					console.log(listStr);
+				}
+				
+				// Fill in data
+				li.querySelector(".style-name-input").value = style.text;
+				li.querySelector(".style-name-input").dataset.id = style.id;
+				li.querySelector(".style-type-input").value = 3+style.id;
+				li.querySelector(".style-items-input").value = listStr;
+				li.querySelector(".delete-btn").dataset.id = style.id;
+
+				styleListEl.appendChild(li);
+
+/*
+                const li = document.createElement('li');
+                li.className = 'style-row';
+                li.dataset.id = style.id;
+                li.draggable = true;
+				
+				let listStr = "";
+				if(style.list && style.list.length > 0){
+					listStr = style.list.map(v => `"${v}"`).join(", ").replace(/"/g, "&quot;");
+					console.log(listStr);
+				}
+
+				
+				
+                li.innerHTML = `
+                    <span class="reorder-handle style-btn">↕️</span>
+                    <input type="text" class="style-name-input" value="${style.name}" data-id="${style.id}">
+					<select class="style-type-input" id="default-style-type-input"></select>
+					<input type="text" class="style-items-input" id="style-items" placeholder="&quot;arvo1&quot;, &quot;arvo2&quot;, &quot;arvo3&quot;, ..." value="${listStr}">
+                    <button class="delete-btn style-btn" data-id="${style.id}">🗑️</button>
+                `;
+                styleListEl.appendChild(li);
+				*/
+            });
+			/*
+            styles.forEach(style => {
+                const li = document.createElement('li');
+                li.className = 'style-row';
+                li.dataset.id = style.id;
+                li.draggable = true;
+
+				
+                li.innerHTML = `
+                    <span class="reorder-handle style-btn">↕️</span>
+                    <input type="text" class="style-name-input" value="${style.name}" data-id="${style.id}">
+					<select class="style-type-input" id="style-type-input"></select>
+					<input type="text" class="style-items-input" id="style-items" placeholder="&quot;arvo1&quot;, &quot;arvo2&quot;, &quot;arvo3&quot;, ...">
+                    <button class="delete-btn style-btn" data-id="${style.id}">🗑️</button>
+                `;
+                styleListEl.appendChild(li);
+            });
+			*/
+			
+			console.timeEnd("renderStylesPage"); // end timer
+		
+		}
+		
+        function renderGroupsPage() {
+			console.time("renderGroupsPage"); // start timer
+		
+            groupListEl.innerHTML = '';
+            groups.forEach(group => {
+                const li = document.createElement('li');
+                li.className = 'group-row';
+                li.dataset.id = group.id;
+                li.draggable = true;
+				
+				// make array of only the groups used in plants:
+				let usedGroupIds = new Set(plants.map(p => p.group));
+				const isUsed = usedGroupIds.has(String(group.id));
+				if(!isUsed){
+					li.classList.add("disabledClass");
+				}
+			
+                li.innerHTML = `
+                    <span class="reorder-handle group-btn">↕️</span>
+                    <input type="text" class="group-name-input" value="${group.name}" data-id="${group.id}">
+                    <button class="delete-btn group-btn" data-id="${group.id}">🗑️</button>
+                `;
+                groupListEl.appendChild(li);
+            });
+			
+			console.timeEnd("renderGroupsPage"); // end timer
+		
+        }
+		
+		function showCompactView(){
+			compactView = true;
+			renderCalendarPage();
+		}
+		function showNormalView(){
+			compactView = false;
+			renderCalendarPage();
+		}
+        
+        function renderCalendarPage() {
+			console.time("renderCalendarPage"); // start timer
+		
+            calendarHead.innerHTML = '';
+            calendarBody.innerHTML = '';
+            
+            if (plants.length === 0) return;
+
+            // Header
+            const headerRow = document.createElement('tr');
+            headerRow.innerHTML = `<th class="date-col-corner">&nbsp;</th>`;
+            plants.forEach(plant => {
+                const th = document.createElement('th');
+                th.className = 'plant-header-cell';
+				th.dataset.id = plant.id;
+				if(lastClickedTh && lastClickedTh.dataset.id === th.dataset.id){
+					th.classList.add("focused-style-title");
+				}
+				let group = plant.group;
+				let displayColumn = false;
+				if(currentGroupOpen == -1){
+					displayColumn = true;
+				}else{
+					if(currentGroupOpen == group){
+						displayColumn = true;
+					}
+				}
+				if(displayColumn){
+					th.innerHTML = `<span class="rotated-text">&nbsp;${plant.name}</span>`;
+					headerRow.appendChild(th);
+				}
+            });
+            calendarHead.appendChild(headerRow);
+            
+            // Body
+            const sortedDates = Object.keys(wateringData).sort((a, b) => {
+                const [da, ma, ya] = a.split('.').map(Number);
+                const [db, mb, yb] = b.split('.').map(Number);
+                return new Date(`20${yb}`, mb-1, db) - new Date(`20${ya}`, ma-1, da);
+            });
+			
+			const maxRowsVisible = 31*3;
+
+            sortedDates.some((date, index) => {
+				// render only part of the table if not in compact view:
+				if(!compactView && index > maxRowsVisible-1){
+					return true;
+				}
+				let todaycss = (index === 0) ? "today" : ""; // highlight first item.
+				let dateformatted = date;
+				let dayshortname = getWeekday(date);
+				
+                const row = document.createElement('tr');
+				if(dayshortname == "Ma"){ // "Ma" is from predefined array for finnish daynames.
+					row.classList.add("weekstart");
+				}
+				
+                row.innerHTML = `<td class="date-col ${todaycss}">${dayshortname}<br>${dateformatted}</td>`;
+                const dayData = wateringData[date] || {};
+				
+				let addRow = true;
+				if(compactView){
+					let foundItems = 0;
+					plants.forEach(plant => {
+						const td = document.createElement('td');
+						const state = dayData[plant.id] || 0;
+						
+						if(lastClickedTh && lastClickedTh.dataset.id == plant.id){
+							if(state){
+								foundItems++;
+							}
+						}
+					});
+					if(!foundItems){
+						addRow = false;
+					}
+				}
+				
+				if(addRow){
+					
+					plants.forEach(plant => {
+						const td = document.createElement('td');
+						const state = dayData[plant.id] || 0;
+						const style = plant.style || 0;
+						const type = findType(style);//plantStyles.find(s => s.id == style)?.type ?? 0;
+						const group = plant.group;
+						
+						let displayColumn = false;
+						if(currentGroupOpen == -1){
+							displayColumn = true;
+						}else{
+							if(currentGroupOpen == group){
+								displayColumn = true;
+							}
+						}
+						
+						
+						if(displayColumn){
+
+							let focusedStr = "";
+							if(lastClickedTh && lastClickedTh.dataset.id == plant.id){
+								//td.classList.add("focused-color");
+								focusedStr = " focused-style-cell";
+							}
+
+	// calendarBody.addEventListener('dblclick',
+
+							let { text: displayText, bgcolor: background } = getDisplayValue(state, style);
+							
+							let cssStyle = "";
+							if(background){
+								cssStyle = "background-color: "+background;
+							}
+				
+							td.innerHTML = `<button class="water-btn ${focusedStr}" data-date="${date}" data-plant-id="${plant.id}" data-style="${style}" style="${cssStyle}">${displayText}</button>`;
+							row.appendChild(td);
+						}
+					
+					});	
+					calendarBody.appendChild(row);
+				}
+
+            });
+			
+			console.timeEnd("renderCalendarPage"); // end timer
+        }
+        
+        // --- Data Modification ---
+        async function addPlant() {
+            const name = newPlantNameInput.value.trim();
+			const style = newPlantStyleSelect.value.trim();
+			const group = newPlantGroupSelect.value.trim();
+			
+            if (!name) return;
+
+            const maxOrder = plants.length > 0 ? Math.max(...plants.map(p => p.order)) : -1;
+            const newPlant = { name: name, order: maxOrder+1, style: style, group: group};
+            
+            const tx = db.transaction(PLANTS_STORE, 'readwrite');
+            const store = tx.objectStore(PLANTS_STORE);
+            const request = store.add(newPlant);
+            
+            request.onsuccess = async (e) => {
+                newPlant.id = e.target.result;
+                plants.push(newPlant);
+                newPlantNameInput.value = '';
+                
+                // Add new plant to all existing watering records
+                const waterTx = db.transaction(WATERING_STORE, 'readwrite');
+                const waterStore = waterTx.objectStore(WATERING_STORE);
+                for (const date in wateringData) {
+                    wateringData[date][newPlant.id] = 0;
+                    waterStore.put({ date: date, data: wateringData[date] });
+                }
+                
+                await waterTx.complete;
+				
+                //renderAll();
+				renderPlantsPage();
+				renderTopTabs();
+            };
+        }
+		
+		
+		
+        async function updatePlantStyle(id, newStyle) {
+            const plant = plants.find(p => p.id === id);
+            if (plant && plant.style !== newStyle) {
+                plant.style = newStyle;
+                const tx = db.transaction(PLANTS_STORE, 'readwrite');
+                tx.objectStore(PLANTS_STORE).put(plant);
+                await tx.complete;
+                //renderCalendarPage(); // Only need to re-render calendar header
+            }
+        }
+		
+		async function updatePlantGroup(id, newGroup) {
+            const plant = plants.find(p => p.id === id);
+            if (plant && plant.group !== newGroup) {
+                plant.group = newGroup;
+                const tx = db.transaction(PLANTS_STORE, 'readwrite');
+                tx.objectStore(PLANTS_STORE).put(plant);
+                await tx.complete;
+                //renderCalendarPage(); // Only need to re-render calendar header
+				
+				// update coloring for inputs if the group is currently open:
+				const li = document.querySelector(`li[data-id="${plant.id}"]`);
+				if(plant.group == currentGroupOpen || currentGroupOpen == -1){
+					li.classList.remove("disabledClass");
+				}else{
+					li.classList.add("disabledClass");
+				}
+				
+				renderTopTabs();
+            }
+        }
+		
+		
+        async function updatePlantName(id, newName) {
+            const plant = plants.find(p => p.id === id);
+            if (plant && plant.name !== newName) {
+                plant.name = newName;
+                const tx = db.transaction(PLANTS_STORE, 'readwrite');
+                tx.objectStore(PLANTS_STORE).put(plant);
+                await tx.complete;
+                //renderCalendarPage(); // Only need to re-render calendar header
+            }
+        }
+        
+        async function deletePlant(id) {
+			const plant = plants.find(p => p.id === id);
+		
+            if (!confirm(`Poista "${plant.name}" ja kaikki data siihen liittyen?`)) return;
+            
+            // Delete from plants store
+            const plantTx = db.transaction(PLANTS_STORE, 'readwrite');
+            plantTx.objectStore(PLANTS_STORE).delete(id);
+            await plantTx.complete;
+
+            plants = plants.filter(p => p.id !== id);
+            
+            // Delete plant's data from watering store
+            const waterTx = db.transaction(WATERING_STORE, 'readwrite');
+            const waterStore = waterTx.objectStore(WATERING_STORE);
+            for (const date in wateringData) {
+                delete wateringData[date][id];
+                waterStore.put({ date: date, data: wateringData[date] });
+            }
+            await waterTx.complete;
+
+			//renderAll();
+			renderPlantsPage();
+			renderTopTabs();
+			
+            if (plants.length === 0) {
+                //showPage(PAGE.PLANTS); // TODO: WTF WHY THIS WAS HERE
+            }
+        }
+
+        async function saveWateringData(date, data) {
+            const tx = db.transaction(WATERING_STORE, 'readwrite');
+            tx.objectStore(WATERING_STORE).put({ date, data });
+            return tx.complete;
+        }
+
+        async function updatePlantOrder() {
+            const tx = db.transaction(PLANTS_STORE, 'readwrite');
+            const store = tx.objectStore(PLANTS_STORE);
+            plants.forEach((plant, index) => {
+                plant.order = index;
+                store.put(plant);
+            });
+            await tx.complete;
+
+			//renderAll();
+			renderPlantsPage();
+        }
+		
+		
+		// groups page:
+
+        // --- Data Modification ---
+        async function addGroup() {
+            const name = newGroupNameInput.value.trim();
+            if (!name) return;
+
+            const maxOrder = groups.length > 0 ? Math.max(...groups.map(p => p.order)) : -1;
+            const newGroup = { name: name, order: maxOrder+1};
+            
+            const tx = db.transaction(GROUPS_STORE, 'readwrite');
+            const store = tx.objectStore(GROUPS_STORE);
+            const request = store.add(newGroup);
+            
+            request.onsuccess = async (e) => {
+                newGroup.id = e.target.result;
+                groups.push(newGroup);
+                newGroupNameInput.value = '';
+
+                //renderAll();
+				renderGroupsPage();
+				renderTopTabs();
+            };
+        }
+
+        async function updateGroupName(id, newName) {
+            const group = groups.find(p => p.id === id);
+            if (group && group.name !== newName) {
+                group.name = newName;
+                const tx = db.transaction(GROUPS_STORE, 'readwrite');
+                tx.objectStore(GROUPS_STORE).put(group);
+                await tx.complete;
+                //renderCalendarPage(); // Only need to re-render calendar header
+				renderTopTabs();
+            }
+        }
+        
+        async function deleteGroup(id) {
+			const group = groups.find(p => p.id === id);
+		
+            if (!confirm(`Poista ryhmä "${group.name}" ?`)) return;
+            
+            // Delete from plants store
+            const groupTx = db.transaction(GROUPS_STORE, 'readwrite');
+            groupTx.objectStore(GROUPS_STORE).delete(id);
+            await groupTx.complete;
+
+            groups = groups.filter(p => p.id !== id);
+            
+			//renderAll();
+			renderGroupsPage();
+			renderTopTabs();
+			
+            if (groups.length === 0) {
+                //showPage(PAGE.GROUPS); // TODO: WTF WHY THIS WAS HERE
+            }
+        }
+
+        async function updateGroupOrder() {
+            const tx = db.transaction(GROUPS_STORE, 'readwrite');
+            const store = tx.objectStore(GROUPS_STORE);
+            groups.forEach((group, index) => {
+                group.order = index;
+                store.put(group);
+            });
+            await tx.complete;
+
+			//renderAll();
+			renderGroupsPage();
+			renderTopTabs();
+        }
+		
+		
+		
+
+        // --- Event Listeners ---
+        function setupEventListeners() {
+            menuIcon.addEventListener('click', (e) => {
+                e.stopPropagation();
+                menu.classList.toggle('open');
+            });
+			
+			const tabsClasses = document.querySelectorAll('.tab');
+			tabsClasses.forEach(tab => {
+				tab.addEventListener('click', () => {
+					tabsClasses.forEach(t => t.classList.remove('active'));
+					tab.classList.add('active');
+					// optional: scroll the tab into view
+					tab.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+				});
+			});
+			
+			const tabs = () => document.querySelectorAll('.tab');
+			const tabsContainer = document.getElementById('top-tabs');
+			tabsContainer.addEventListener('click', (e) => {
+				const clickedTab = e.target.closest('.tab');
+				if (!clickedTab) return; // clicked outside of a tab
+
+				// Remove active class from all tabs
+				tabs().forEach(tab => tab.classList.remove('active'));
+
+				// Add active class to clicked tab
+				clickedTab.classList.add('active');
+
+				// Save clicked tab ID to DB
+				const tabId = clickedTab.dataset.id;
+				saveSetting(SETTING_LAST_OPEN_TAB, tabId);
+				
+				console.log("current group open: "+tabId);
+				currentGroupOpen = tabId;
+
+				// Optionally scroll it into view
+				clickedTab.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+				
+				if(currentPageName == "calendar"){
+					renderCalendarPage();
+				}else if(currentPageName == "plants"){
+					renderPlantsPage();
+				}else if(currentPageName == "groups"){
+					renderGroupsPage();
+				}else{
+					renderAll();
+					console.log("renderAll triggered, page not found");
+				}
+			});
+			
+            document.addEventListener('click', () => menu.classList.remove('open'));
+            menu.addEventListener('click', (e) => e.stopPropagation());
+            
+            navPlants.addEventListener('click', (e) => {
+				e.preventDefault();
+				showPage(PAGE.PLANTS);
+				showTopTabs(true);
+				renderPlantsPage();
+			});
+			navGroups.addEventListener('click', (e) => {
+				e.preventDefault();
+				showPage(PAGE.GROUPS);
+				showTopTabs(false);
+				renderGroupsPage();
+			});
+			navStyles.addEventListener('click', (e) => {
+				e.preventDefault();
+				showPage(PAGE.STYLES);
+				showTopTabs(false);
+				renderStylesPage();
+			});
+            navCalendar.addEventListener('click', (e) => {
+				e.preventDefault();
+				showPage(PAGE.CALENDAR);
+				showTopTabs(true);
+				renderCalendarPage();
+			});
+
+            addPlantBtn.addEventListener('click', addPlant);
+            newPlantNameInput.addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') addPlant();
+            });
+
+            plantListEl.addEventListener('click', (e) => {
+                if (e.target.classList.contains('delete-btn')) {
+                    const id = parseInt(e.target.dataset.id, 10);
+                    deletePlant(id);
+                }
+            });
+
+            plantListEl.addEventListener('change', (e) => {
+                if (e.target.classList.contains('plant-name-input')) {
+                    const id = parseInt(e.target.dataset.id, 10);
+                    const newName = e.target.value.trim();
+                    updatePlantName(id, newName);
+                }
+            });
+			
+            plantListEl.addEventListener('change', (e) => {
+                if (e.target.classList.contains('plant-style-input')) {
+                    const id = parseInt(e.target.dataset.id, 10);
+                    const newStyle = e.target.value.trim();
+                    updatePlantStyle(id, newStyle);
+                }
+            });
+			
+			
+            plantListEl.addEventListener('change', (e) => {
+                if (e.target.classList.contains('plant-group-input')) {
+                    const id = parseInt(e.target.dataset.id, 10);
+                    const newGroup = e.target.value.trim();
+                    updatePlantGroup(id, newGroup);
+                }
+            });
+			
+			
+			// groups page:
+
+            addGroupBtn.addEventListener('click', addGroup);
+            newGroupNameInput.addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') addGroup();
+            });
+
+            groupListEl.addEventListener('click', (e) => {
+                if (e.target.classList.contains('delete-btn')) {
+                    const id = parseInt(e.target.dataset.id, 10);
+                    deleteGroup(id);
+                }
+            });
+
+            groupListEl.addEventListener('change', (e) => {
+                if (e.target.classList.contains('group-name-input')) {
+                    const id = parseInt(e.target.dataset.id, 10);
+                    const newName = e.target.value.trim();
+                    updateGroupName(id, newName);
+                }
+            });
+			
+ 
+
+            // --- START: New Calendar Event Logic ---
+            let longPressTimer = null;
+            const LONG_PRESS_DURATION = 500;
+
+			
+			calendarHead.addEventListener('dblclick', (e) => {
+				e.preventDefault();
+
+				// find the closest th with the right class and data-id
+				const th = e.target.closest('th.plant-header-cell');
+
+				if (!th) return; // clicked outside th
+
+				let resetted = false;
+
+				// reset previous clicked th (if any)
+				if (lastClickedTh) {
+					// reset to original bg color
+					lastClickedTh.style.backgroundColor = "";
+					
+					// reset view if deselected title:
+					if(lastClickedTh.dataset.id === th.dataset.id){
+						lastClickedTh = null;
+						lastClickedTitleID = null;
+						resetted = true;
+					}
+				}
+				
+				if(!resetted){
+					lastClickedTitleID = th.dataset.id;
+
+					// update tracker
+					lastClickedTh = th;
+
+					console.log("clicked " + lastClickedTitleID);
+
+					// change background color of that th
+					th.style.backgroundColor = focusedTitleBG;
+					showCompactView();
+
+				}else{
+				
+					console.log("resetted ");
+					showNormalView();
+				}
+				
+				
+			});
+	
+            // --- Double Tap to Increment ---
+            calendarBody.addEventListener('dblclick', (e) => {
+				console.log("fired");
+                const target = e.target;
+				//const target = e.target.closest('.water-btn');
+				//if (!target) return;
+                if (!target.classList.contains('water-btn')) return;
+                
+                e.preventDefault();
+
+                const date = target.dataset.date;
+                const plantId = parseInt(target.dataset.plantId, 10);
+				const style = parseInt(target.dataset.style, 10);
+				let type = findType(style);//plantStyles.find(s => s.id == style)?.type ?? 0;
+				
+
+                let currentState = wateringData[date][plantId] || 0;
+	
+
+	
+                let newState = currentState + 1;
+				switch(type){
+					case 1:
+						// on/off:
+						if(newState > 1){
+							newState = 0;
+						}
+					break;
+					case 2:
+					case 3:
+						// array of colors:
+						let list = findList(style);//plantStyles.find(s => s.id == style)?.list ?? null;
+						if(list){
+							if(newState > list.length-1){
+								newState = 0;
+							}
+						}
+					break;
+					default: // type 0, numbered
+						// no limits.
+					break;
+				}
+				let { text: displayText, bgcolor: background } = getDisplayValue(newState, style);
+
+// td.innerHTML = `<button class="water-btn ${focusedStr}" data-date="${date}" data-plant-id="${plant.id}" data-style="${style}">${displayText}</button>`;
+
+                wateringData[date][plantId] = newState;
+
+                target.textContent = displayText; // Update display
+				if(background){
+					target.style.backgroundColor = background;
+				}else{
+					target.style.backgroundColor = "";
+				}
+				
+                target.classList.add('session-changed');
+
+                saveWateringData(date, wateringData[date]);
+            });
+
+
+			function vibratePhone() {
+			  if ("vibrate" in navigator) {
+				// Vibrate for 200ms
+				navigator.vibrate(200);
+
+				// Or use a pattern: vibrate-pause-vibrate
+				// navigator.vibrate([200, 100, 200]);
+			  } else {
+				console.log("Vibration API not supported on this device.");
+			  }
+			}
+			
+			
+            // --- Long Press to Decrement ---
+            const handleLongPress = (target) => {
+                if (!target.classList.contains('water-btn')) return;
+
+                const date = target.dataset.date;
+                const plantId = parseInt(target.dataset.plantId, 10);
+				const style = parseInt(target.dataset.style, 10);
+
+                
+                let currentState = wateringData[date][plantId] || 0;
+                if (currentState > 0) {
+                    let newState = currentState - 1;
+					
+		
+					let { text: displayText, bgcolor: background } = getDisplayValue(newState, style);
+					
+					
+                    wateringData[date][plantId] = newState;
+
+                    target.textContent = displayText; // Update display
+					if(background){
+						target.style.backgroundColor = background;
+					}else{
+						target.style.backgroundColor = "";
+					}
+                    target.classList.add('session-changed');
+
+                    saveWateringData(date, wateringData[date]);
+					
+					vibratePhone();
+                }
+            };
+
+            const startPress = (e) => {
+                if (e.type === 'mousedown' && e.button !== 0) return; // Only for left mouse button
+
+                const target = e.target;
+                if (!target.classList.contains('water-btn')) return;
+
+                longPressTimer = setTimeout(() => {
+                    handleLongPress(target);
+                    longPressTimer = null; // Reset timer
+                }, LONG_PRESS_DURATION);
+            };
+
+            const cancelPress = () => {
+                if (longPressTimer) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+            };
+			
+			
+            
+            // Mouse events
+            calendarBody.addEventListener('mousedown', startPress);
+            calendarBody.addEventListener('mouseup', cancelPress);
+            calendarBody.addEventListener('mouseleave', cancelPress, true);
+
+
+            // Touch events
+            calendarBody.addEventListener('touchstart', (e) => {
+                // Prevent scrolling or other default actions while holding the button
+                //if (e.target.classList.contains('water-btn')) {
+                    //e.preventDefault();
+                //}
+                startPress(e);
+            });
+            calendarBody.addEventListener('touchend', cancelPress);
+            calendarBody.addEventListener('touchcancel', cancelPress);
+            
+            // Prevent context menu on long press
+            calendarBody.addEventListener('contextmenu', (e) => {
+                if (e.target.classList.contains('water-btn')) {
+                    e.preventDefault();
+                }
+            });
+            // --- END: New Calendar Event Logic ---
+			
+
+
+		
+            // Drag and Drop for Plant Reordering
+            let draggedItem = null;
+
+
+            plantListEl.addEventListener('dragstart', (e) => {
+                if (e.target.classList.contains('plant-row')) {
+                    draggedItem = e.target;
+                    setTimeout(() => e.target.classList.add('dragging'), 0);
+                }
+            });
+
+            plantListEl.addEventListener('dragend', (e) => {
+                if (draggedItem) {
+                    draggedItem.classList.remove('dragging');
+                    draggedItem = null;
+
+                    // Update local 'plants' array order
+                    const newOrderedIds = [...plantListEl.querySelectorAll('.plant-row')].map(row => parseInt(row.dataset.id));
+                    plants.sort((a, b) => newOrderedIds.indexOf(a.id) - newOrderedIds.indexOf(b.id));
+
+                    // Persist new order to DB
+                    updatePlantOrder();
+                }
+            });
+            
+            plantListEl.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                const afterElement = getDragAfterElement(plantListEl, e.clientY);
+                if (afterElement == null) {
+                    plantListEl.appendChild(draggedItem);
+                } else {
+                    plantListEl.insertBefore(draggedItem, afterElement);
+                }
+            });
+			
+			
+			
+			function getDragAfterElement(container, y) {
+				const draggableElements = [...container.querySelectorAll('.plant-row:not(.dragging)')];
+				return draggableElements.reduce((closest, child) => {
+					const box = child.getBoundingClientRect();
+					const offset = y - box.top - box.height / 2;
+					if (offset < 0 && offset > closest.offset) {
+						return { offset: offset, element: child };
+					} else {
+						return closest;
+					}
+				}, { offset: Number.NEGATIVE_INFINITY }).element;
+			}
+			
+			// groups page:
+			
+
+            // Drag and Drop for Plant Reordering
+            let draggedGroupItem = null;
+            groupListEl.addEventListener('dragstart', (e) => {
+                if (e.target.classList.contains('group-row')) {
+                    draggedGroupItem = e.target;
+                    setTimeout(() => e.target.classList.add('dragging'), 0);
+                }
+            });
+
+            groupListEl.addEventListener('dragend', (e) => {
+                if (draggedGroupItem) {
+                    draggedGroupItem.classList.remove('dragging');
+                    draggedGroupItem = null;
+
+                    // Update local 'plants' array order
+                    const newOrderedIds = [...groupListEl.querySelectorAll('.group-row')].map(row => parseInt(row.dataset.id));
+                    groups.sort((a, b) => newOrderedIds.indexOf(a.id) - newOrderedIds.indexOf(b.id));
+
+                    // Persist new order to DB
+                    updateGroupOrder();
+                }
+            });
+            
+            groupListEl.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                const afterElement = getDragAfterGroupElement(groupListEl, e.clientY);
+                if (afterElement == null) {
+                    groupListEl.appendChild(draggedGroupItem);
+                } else {
+                    groupListEl.insertBefore(draggedGroupItem, afterElement);
+                }
+            });
+        }
+        
+        function getDragAfterGroupElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.group-row:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        // --- Start App ---
+        initializeApp();
+    });
+    </script>
+</body>
+</html>
